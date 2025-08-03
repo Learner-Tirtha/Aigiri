@@ -1,0 +1,105 @@
+{
+  "project_info": {
+    "project_number": "696692515833",
+    "project_id": "uninotify-3e948",
+    "storage_bucket": "uninotify-3e948.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:696692515833:android:1586292a6a7356128e9328",
+        "android_client_info": {
+          "package_name": "com.example.aigiri"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJ3vnsacpF9tKtmlHkBItGHZtuMpOQ7_A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:696692515833:android:7fcc54dd700f58628e9328",
+        "android_client_info": {
+          "package_name": "com.example.fooddeliveryapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJ3vnsacpF9tKtmlHkBItGHZtuMpOQ7_A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:696692515833:android:d0ebee71c0c8cbf48e9328",
+        "android_client_info": {
+          "package_name": "com.example.odoo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJ3vnsacpF9tKtmlHkBItGHZtuMpOQ7_A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:696692515833:android:32a2b85cd904dd388e9328",
+        "android_client_info": {
+          "package_name": "com.example.safetyapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJ3vnsacpF9tKtmlHkBItGHZtuMpOQ7_A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:696692515833:android:21cdb91cb06e95498e9328",
+        "android_client_info": {
+          "package_name": "com.example.safetydisclose"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJ3vnsacpF9tKtmlHkBItGHZtuMpOQ7_A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

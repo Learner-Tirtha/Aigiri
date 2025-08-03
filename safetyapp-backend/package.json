@@ -1,0 +1,24 @@
+{
+  "name": "safetyapp-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@100mslive/server-sdk": "^0.3.0",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.0",
+    "express": "^4.21.2",
+    "firebase-admin": "^13.4.0",
+    "jsonwebtoken": "^9.0.2",
+    "livekit-server-sdk": "^2.13.1",
+    "twilio": "^5.7.1",
+    "uuid": "^11.1.0"
+  }
+}
