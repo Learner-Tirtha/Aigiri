@@ -129,7 +129,7 @@ dependencies {
 //    configurations.all {
 //        exclude(group = "com.github.webrtc-sdk", module = "android")
 //    }
-
+    implementation ("ai.picovoice:porcupine-android:3.0.3")
 
 
 
