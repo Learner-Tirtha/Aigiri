@@ -214,49 +214,59 @@ app.get("/profile", async (req, res) => {
 });
 
 app.post("/send-sos", async (req, res) => {
-       console.log("IN Send SOS")
+    console.log("IN Send SOS");
     try {
         const { userId, message } = req.body;
 
         if (!userId || !message) {
-            console.log("Empty")
+            console.log("Empty");
             return res.status(400).json({ error: "Missing userId or message" });
         }
 
-        // Fetch emergency contacts from Firestore subcollection
+        // Fetch emergency contacts from Firestore
         const contactsSnapshot = await db
             .collection("User")
             .doc(userId)
             .collection("emergency_contacts")
-            .orderBy("priority", "asc") // Optional: sort by priority
+            .orderBy("priority", "asc")
             .get();
 
         if (contactsSnapshot.empty) {
-            console.log("empty")
+            console.log("empty");
             return res.status(404).json({ error: "No emergency contacts found" });
         }
-        console.log("Enter in SOS")
+        const script = `Hello, this is an important safety alert. You are listed as a trusted contact. Please check your phone messages immediately.she may need your help. She is waiting for you.Once again, you are her trusted person. Please check your phone now.`;
+        console.log("Enter in SOS");
+
         const phoneNumbers = contactsSnapshot.docs.map(doc => doc.data().phoneNumber);
 
-        // Send SOS message to each contact
-        const sendMessages = phoneNumbers.map(phone => {
-            return twilioClient.messages.create({
+        // Send SMS and Voice Call to each contact
+        const sendAlerts = phoneNumbers.map(async phone => {
+            // Send SMS
+            await twilioClient.messages.create({
                 body: message,
+                from: TWILIO_PHONE_NUMBER,
+                to: phone
+            });
+
+            // Make Voice Call
+            await twilioClient.calls.create({
+                twiml: `<Response><Say voice="alice" language="en-IN">${script}</Say></Response>`,
                 from: TWILIO_PHONE_NUMBER,
                 to: phone
             });
         });
 
-        await Promise.all(sendMessages);
+        await Promise.all(sendAlerts);
 
-        // Store the SOS record (optional)
+        // Log the alert
         await db.collection("sos_alerts").add({
             userId,
             message,
             timestamp: new Date().toISOString()
         });
 
-        console.log(`🚨 SOS sent to ${phoneNumbers.length} contacts`);
+        console.log(`🚨 SOS sent via SMS and Voice to ${phoneNumbers.length} contacts`);
         res.status(200).json({ success: true });
 
     } catch (err) {
