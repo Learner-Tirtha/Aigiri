@@ -11,10 +11,19 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import ai.picovoice.porcupine.PorcupineException
 import ai.picovoice.porcupine.PorcupineManager
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import com.example.aigiri.network.TokenManager
 import com.example.aigiri.network.wordConfig
+import com.example.aigiri.repository.EmergencyContactsRepository
+import com.example.aigiri.repository.SOSRepository
+import com.example.aigiri.repository.UserRepository
+import com.example.aigiri.viewmodel.SOSManager
+import com.example.aigiri.viewmodel.SOSViewModel
+import com.google.android.gms.location.LocationServices
 import java.io.File
 
-class WakeWordService : Service() {
+class WakeWordService() : Service() {
 
     private var porcupineManager: PorcupineManager? = null
 
@@ -101,8 +110,17 @@ class WakeWordService : Service() {
     }
 
     private fun triggerSOS() {
-        Log.d("WakeWordService", "Triggering SOS...")
+        val sosManager = SOSManager(
+            context = applicationContext,
+            sosRepository = SOSRepository(applicationContext),
+            emergencyRepository = EmergencyContactsRepository(),
+            userRepository = UserRepository(),
+            tokenManager = TokenManager(applicationContext)
+        )
+
+        sosManager.triggerSOS()
     }
+
 
     override fun onDestroy() {
         super.onDestroy()
