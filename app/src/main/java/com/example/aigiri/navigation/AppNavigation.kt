@@ -48,6 +48,9 @@ fun AppNavigation(startDestination: String, tokenManager: TokenManager) {
             context.applicationContext as Application
         )
     )
+    val NationalHelplineViewModel= remember {
+        NationalHelplineViewModel()
+    }
     val liveStreamViewModel=remember{LiveStreamViewModel(tokenManager = TokenManager(context =context))}
     val settingsViewModel= remember { SettingsViewModel(tokenManager = TokenManager(context)) }
     val ChatViewModel= remember { ChatViewModel(ChatRepository()) }
@@ -151,6 +154,9 @@ fun AppNavigation(startDestination: String, tokenManager: TokenManager) {
             ReportHistoryScreen(
                 onBackClick = { navController.popBackStack() }
             )
+        }
+        composable("national_helpline"){
+            NationalHelpLineScreen(navController=navController, viewModel =NationalHelplineViewModel)
         }
 
 

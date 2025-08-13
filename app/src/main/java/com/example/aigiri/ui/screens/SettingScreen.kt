@@ -71,11 +71,18 @@ fun SettingsScreen(
             "Manage"
         ),
         SettingsItem(
+            "National Helpline",
+            { Icon(Icons.Default.Phone, contentDescription = null, tint = primaryPurple) },
+            { navController.navigate("national_helpline") },
+            "Call Now"
+        ),
+        SettingsItem(
             "Log Out",
             { Icon(Icons.Default.ExitToApp, contentDescription = null, tint = primaryPurple) },
             { viewModel.onLogoutClick() },
             "Sign out"
         )
+
     )
 
     Scaffold(
