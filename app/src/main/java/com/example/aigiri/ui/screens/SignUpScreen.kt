@@ -44,9 +44,9 @@ fun SignUpScreen(
             !usernameTaken && !emailTaken && !phoneTaken
 
     val isLoading = state is SendOtpUiState.Loading
-
     val didInit = rememberSaveable { mutableStateOf(false) }
 
+    // Load saved temp user
     LaunchedEffect(Unit) {
         if (!didInit.value) {
             viewModel.getTempUser()?.let { user ->
@@ -65,6 +65,7 @@ fun SignUpScreen(
         }
     }
 
+    // Navigate on success
     LaunchedEffect(state) {
         if (state is SendOtpUiState.Success) {
             val success = state as SendOtpUiState.Success
@@ -78,133 +79,138 @@ fun SignUpScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    Text("Create Account", style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        "Create Your Account",
+                        fontSize = 22.sp,
+                        color = Color(0xFF6A1B9A) // Fixed purple
+                    )
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = Color.White // Always light mode
                 )
             )
         },
-        content = { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 20.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
+        containerColor = Color.White // Scaffold background fixed to white
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Username
+            InputField(
+                value = username,
+                onValueChange = {
+                    username = it
+                    viewModel.checkUsername(it)
+                },
+                label = "Username",
+                isError = (!isUsernameValid && username.isNotEmpty()) || usernameTaken,
+                supportingText = when {
+                    !isUsernameValid && username.isNotEmpty() -> "Username is required"
+                    usernameTaken -> "Username already exists"
+                    else -> null
+                }
+            )
+
+            // Password
+            InputField(
+                value = password,
+                onValueChange = { password = it },
+                label = "Password",
+                keyboardType = KeyboardType.Password,
+                isError = password.isNotEmpty() && !isPasswordValid,
+                supportingText = passwordWarning(password).takeIf { it.isNotEmpty() }
+            )
+
+            // Confirm Password
+            InputField(
+                value = confirmPassword,
+                onValueChange = { confirmPassword = it },
+                label = "Confirm Password",
+                keyboardType = KeyboardType.Password,
+                isError = confirmPassword.isNotEmpty() && !isConfirmPasswordValid,
+                supportingText = if (confirmPassword.isNotEmpty() && !isConfirmPasswordValid)
+                    "Passwords do not match" else null
+            )
+
+            // Email
+            InputField(
+                value = email,
+                onValueChange = {
+                    email = it
+                    viewModel.checkEmail(it)
+                },
+                label = "Email (optional)",
+                keyboardType = KeyboardType.Email,
+                isError = emailTaken,
+                supportingText = if (emailTaken) "Email is already in use" else null
+            )
+
+            // Phone
+            InputField(
+                value = phoneNumber,
+                onValueChange = {
+                    if (it.length <= 13) {
+                        phoneNumber = it
+                        viewModel.checkPhone(it)
+                    }
+                },
+                label = "+91XXXXXXXXXX",
+                keyboardType = KeyboardType.Phone,
+                isError = phoneNumber.isNotEmpty() && (!isPhoneValid || phoneTaken),
+                supportingText = when {
+                    phoneNumber.isNotEmpty() && !isPhoneValid -> "Enter a valid phone number"
+                    isPhoneValid && phoneTaken -> "Phone number already in use"
+                    else -> null
+                }
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Button
+            Button(
+                onClick = {
+                    viewModel.sendOtp(username, password, phoneNumber, email.takeIf { it.isNotBlank() })
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                enabled = isFormValid && !isLoading,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A))
             ) {
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Username
-                InputField(
-                    value = username,
-                    onValueChange = {
-                        username = it
-                        viewModel.checkUsername(it)
-                    },
-                    label = "Username",
-                    isError = (!isUsernameValid && username.isNotEmpty()) || usernameTaken,
-                    supportingText = when {
-                        !isUsernameValid && username.isNotEmpty() -> "Username is required"
-                        usernameTaken -> "Username already exists"
-                        else -> null
-                    }
-                )
-
-                // Password
-                InputField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = "Password",
-                    keyboardType = KeyboardType.Password,
-                    isError = password.isNotEmpty() && !isPasswordValid,
-                    supportingText = passwordWarning(password).takeIf { it.isNotEmpty() }
-                )
-
-                // Confirm Password
-                InputField(
-                    value = confirmPassword,
-                    onValueChange = { confirmPassword = it },
-                    label = "Confirm Password",
-                    keyboardType = KeyboardType.Password,
-                    isError = confirmPassword.isNotEmpty() && !isConfirmPasswordValid,
-                    supportingText = if (confirmPassword.isNotEmpty() && !isConfirmPasswordValid)
-                        "Passwords do not match" else null
-                )
-
-                // Email
-                InputField(
-                    value = email,
-                    onValueChange = {
-                        email = it
-                        viewModel.checkEmail(it)
-                    },
-                    label = "Email (optional)",
-                    keyboardType = KeyboardType.Email,
-                    isError = emailTaken,
-                    supportingText = if (emailTaken) "Email is already in use" else null
-                )
-
-                // Phone
-                InputField(
-                    value = phoneNumber,
-                    onValueChange = {
-                        if (it.length <= 13) {
-                            phoneNumber = it
-                            viewModel.checkPhone(it)
-                        }
-                    },
-                    label = "+91XXXXXXXXXX",
-                    keyboardType = KeyboardType.Phone,
-                    isError = phoneNumber.isNotEmpty() && (!isPhoneValid || phoneTaken),
-                    supportingText = when {
-                        phoneNumber.isNotEmpty() && !isPhoneValid -> "Enter a valid phone number"
-                        isPhoneValid && phoneTaken -> "Phone number already in use"
-                        else -> null
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Button
-                Button(
-                    onClick = {
-                        viewModel.sendOtp(username, password, phoneNumber, email.takeIf { it.isNotBlank() })
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    enabled = isFormValid && !isLoading
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("Next")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Error state
-                if (state is SendOtpUiState.Error) {
-                    val error = state as SendOtpUiState.Error
-                    Text(
-                        text = error.message,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
                     )
+                } else {
+                    Text("Next", color = Color.White)
                 }
-
-                Spacer(modifier = Modifier.height(60.dp))
             }
-        }
-    )
-}
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Error message
+            if (state is SendOtpUiState.Error) {
+                val error = state as SendOtpUiState.Error
+                Text(
+                    text = error.message,
+                    color = Color.Red,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Spacer(modifier = Modifier.height(60.dp))
+        }
+    }
+}
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun InputField(
     value: String,
@@ -218,7 +224,7 @@ private fun InputField(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            label = { Text(label) },
+            label = { Text(label, color = Color.Black) },
             isError = isError,
             modifier = Modifier
                 .fillMaxWidth()
@@ -226,18 +232,25 @@ private fun InputField(
             shape = RoundedCornerShape(14.dp),
             keyboardOptions = KeyboardOptions.Default.copy(keyboardType = keyboardType),
             singleLine = true,
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                focusedBorderColor = Color(0xFF6A1B9A),
+                unfocusedBorderColor = Color.Gray,
+                cursorColor = Color(0xFF6A1B9A),
+                containerColor = Color.White,
+                focusedTextColor = Color.Black,
+                unfocusedTextColor = Color.Black
+            )
         )
         if (supportingText != null) {
             Text(
                 text = supportingText,
-                color = MaterialTheme.colorScheme.error,
+                color = Color.Red,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
     }
 }
-
 
 
 

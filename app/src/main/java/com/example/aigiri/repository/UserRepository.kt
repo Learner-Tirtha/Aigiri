@@ -31,4 +31,7 @@ class UserRepository(private val userDao: UserDao = UserDao()) {
     suspend fun fetchPasswordByUsername(username: String):Result<String?>{
         return userDao.getPasswordByUsername(username)
     }
+    suspend fun updatePasswordByPhone(phoneNo: String, newPassword: String): Result<Unit> {
+        return userDao.updatePasswordByPhoneNo(phoneNo, newPassword)
+    }
 }

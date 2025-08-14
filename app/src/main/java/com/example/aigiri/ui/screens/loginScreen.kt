@@ -1,5 +1,6 @@
 package com.example.aigiri.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,10 +40,13 @@ fun LoginScreen(
     val isValid = identifier.isNotBlank() && password.isNotBlank()
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    val token by tokenManager.tokenFlow.collectAsState(initial = null)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .background(Color.White) // Force light mode background
+            .padding(24.dp),          // Consistent global padding
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -68,7 +72,10 @@ fun LoginScreen(
             label = { Text("Password") },
             singleLine = true,
             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done
+            ),
             trailingIcon = {
                 val icon = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
                 val desc = if (passwordVisible) "Hide password" else "Show password"
@@ -89,7 +96,7 @@ fun LoginScreen(
             modifier = Modifier
                 .align(Alignment.End)
                 .clickable {
-                    navController.navigate("forgot_password") // Implement this route
+                    navController.navigate("enter_phoneno")
                 },
             textDecoration = TextDecoration.Underline
         )
@@ -125,32 +132,6 @@ fun LoginScreen(
             )
         }
 
-        val token by tokenManager.tokenFlow.collectAsState(initial = null)
-
-        LaunchedEffect(loginState, token) {
-            when (loginState) {
-                is LoginUiState.Success -> {
-                    if (token != null) {
-                        navController.navigate("dashboard") {
-                            popUpTo("login") { inclusive = true }
-                        }
-                        viewModel.resetState()
-                    }
-                }
-
-                is LoginUiState.NavigateToEmergencyContact -> {
-                    navController.navigate("add_contacts") {
-                        popUpTo("login") { inclusive = true }
-                    }
-                    viewModel.resetState()
-                }
-
-                else -> Unit
-            }
-        }
-
-
-
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
@@ -162,5 +143,26 @@ fun LoginScreen(
             },
             textDecoration = TextDecoration.Underline
         )
+    }
+
+    // Navigation effects
+    LaunchedEffect(loginState, token) {
+        when (loginState) {
+            is LoginUiState.Success -> {
+                if (token != null) {
+                    navController.navigate("dashboard") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                    viewModel.resetState()
+                }
+            }
+            is LoginUiState.NavigateToEmergencyContact -> {
+                navController.navigate("add_contacts") {
+                    popUpTo("login") { inclusive = true }
+                }
+                viewModel.resetState()
+            }
+            else -> Unit
+        }
     }
 }

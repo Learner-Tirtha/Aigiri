@@ -108,6 +108,27 @@ class UserDao(private val db: FirebaseFirestore = FirebaseFirestore.getInstance(
             Result.failure(e)
         }
     }
+    suspend fun updatePasswordByPhoneNo(phoneNo: String, newPassword: String): Result<Unit> {
+        return try {
+            val snapshot = usersCollection
+                .whereEqualTo("phone_no", phoneNo)
+                .limit(1)
+                .get()
+                .await()
+
+            if (snapshot.documents.isNotEmpty()) {
+                val docId = snapshot.documents[0].id
+                usersCollection.document(docId)
+                    .update("password", newPassword)
+                    .await()
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("User with phone number $phoneNo not found"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
 
 }

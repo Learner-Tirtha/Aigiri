@@ -51,6 +51,15 @@ fun AppNavigation(startDestination: String, tokenManager: TokenManager) {
     val NationalHelplineViewModel= remember {
         NationalHelplineViewModel()
     }
+    val ForgotPasswordViewModel= remember {
+        ForgotPasswordViewModel(otpRepository = OtpRepository(), userRepository = UserRepository())
+    }
+    val forgotPasswordVerificationViewModel= remember {
+        ForgotPasswordVerificationViewModel(otpRepository = OtpRepository())
+    }
+    val resetPasswordViewModel= remember {
+        ResetPasswordViewModel(userRepository = UserRepository())
+    }
     val liveStreamViewModel=remember{LiveStreamViewModel(tokenManager = TokenManager(context =context))}
     val settingsViewModel= remember { SettingsViewModel(tokenManager = TokenManager(context)) }
     val ChatViewModel= remember { ChatViewModel(ChatRepository()) }
@@ -158,8 +167,44 @@ fun AppNavigation(startDestination: String, tokenManager: TokenManager) {
         composable("national_helpline"){
             NationalHelpLineScreen(navController=navController, viewModel =NationalHelplineViewModel)
         }
+        composable("enter_phoneno") {
+            forgotPasswordPhonenoScreen(navController = navController, verifyOtpViewModel = ForgotPasswordViewModel)
+        }
+        composable(
+            route = "forgot_password_verify_otp/{phoneNumber}/{verificationId}",
+            arguments = listOf(
+                navArgument("phoneNumber") { type = NavType.StringType },
+                navArgument("verificationId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val phoneNumber = backStackEntry.arguments?.getString("phoneNumber") ?: ""
+            val verificationId = backStackEntry.arguments?.getString("verificationId") ?: ""
 
+            VerifyOtpForgotPassword(
+                navController = navController,
+                phoneNumber = phoneNumber,
+                verificationId = verificationId,
+                viewModel = forgotPasswordVerificationViewModel,
+                verifyOtpViewModel = ForgotPasswordViewModel
+            )
+        }
+        composable(
+            route = "reset_password/{phoneNumber}",
+            arguments = listOf(
+                navArgument("phoneNumber") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val phoneNumber = backStackEntry.arguments?.getString("phoneNumber") ?: ""
 
+            ResetPasswordScreen(
+                navController = navController,
+                phoneNumber = phoneNumber,
+                viewModel = resetPasswordViewModel
+            )
+        }
+        composable("password_update_success") {
+            PasswordUpdateSuccessScreen(navController = navController)
+        }
 
     }
 }
