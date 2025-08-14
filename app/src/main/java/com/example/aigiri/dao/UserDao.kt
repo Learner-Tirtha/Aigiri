@@ -1,5 +1,6 @@
 package com.example.aigiri.dao
 
+import at.favre.lib.crypto.bcrypt.BCrypt
 import com.example.aigiri.model.EmergencyContact
 import com.example.aigiri.model.User
 import com.google.firebase.firestore.FirebaseFirestore
@@ -125,6 +126,31 @@ class UserDao(private val db: FirebaseFirestore = FirebaseFirestore.getInstance(
             } else {
                 Result.failure(Exception("User with phone number $phoneNo not found"))
             }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    suspend fun getHashedPasswordByUserId(userId: String): Result<String?> {
+        return try {
+            val document = usersCollection
+                .document(userId)
+                .get()
+                .await()
+
+            val hashedPassword = document.getString("password")
+            Result.success(hashedPassword)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updatePasswordByUserId(userId: String, hashedPassword: String): Result<Unit> {
+        return try {
+            usersCollection
+                .document(userId)
+                .update("password", hashedPassword)
+                .await()
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }

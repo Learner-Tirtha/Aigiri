@@ -32,6 +32,10 @@
             android:name=".Trigger_SOS.WakeWordService"
             android:foregroundServiceType="microphone"
             android:exported="false"/>
+        <service
+            android:name=".service.LiveLocationService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -1,0 +1,11 @@
+{
+  "hosting": {
+    "public": "live-location-web",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/live-location-osm/**", "destination": "/osm.html" },
+      { "source": "/owner/**", "destination": "/owner.html" },
+      { "source": "/live-location/**", "destination": "/index.html" }
+    ]
+  }
+}

@@ -33,7 +33,7 @@ fun ResetPasswordScreen(
 
     LaunchedEffect(state.showSuccessScreen) {
         if (state.showSuccessScreen) {
-            navController.navigate("password_update_success") {
+            navController.navigate("forgot_password_update_success") {
                 popUpTo(0) { inclusive = true }
             }
         }

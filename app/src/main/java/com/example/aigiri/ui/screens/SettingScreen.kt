@@ -67,7 +67,7 @@ fun SettingsScreen(
         SettingsItem(
             "Reset Password",
             { Icon(Icons.Default.Lock, contentDescription = null, tint = primaryPurple) },
-            { /* TODO: Handle action */ },
+            { navController.navigate("setting_reset_password") },
             "Manage"
         ),
         SettingsItem(

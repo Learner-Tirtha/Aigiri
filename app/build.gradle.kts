@@ -97,6 +97,8 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
 
+    // Realtime Database for live location sharing
+    implementation ("com.google.firebase:firebase-database-ktx")
     implementation("io.ktor:ktor-client-core:2.3.8")
     implementation("io.ktor:ktor-client-cio:2.3.8")
     implementation("io.ktor:ktor-client-android:2.3.8")

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aigiri Live Location</title>
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    #map { height: 100%; width: 100%; }
+    .banner { position: absolute; top: 12px; left: 12px; background: #ffffffdd; border-radius: 8px; padding: 10px 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); z-index: 10; }
+    .status { font-size: 12px; color: #6a1b9a; margin-top: 6px; }
+  </style>
+  <!-- Google Maps JS API: replace YOUR_GOOGLE_MAPS_API_KEY -->
+  <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBjDndrYpq4gkokyo0ZCBeSMeLBZ-Vf00Y&callback=initMap"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="banner">
+    <div><strong>Aigiri</strong> — Live Location</div>
+    <div id="who" class="status"></div>
+    <div id="lastUpdated" class="status"></div>
+  </div>
+  <div id="map"></div>
+
+  <script>
+    // 1) Paste your Firebase Web Config here (from Firebase console > Project settings > General > Your apps > Web app)
+    //    Keep API keys safe; these are public client keys for Firebase web SDK.
+    const firebaseConfig = {
+      apiKey: "AIzaSyCkJQ_lWGO_b7Y4KcPGqN5w-z7RKkk_NjE",
+      authDomain: "uninotify-3e948.firebaseapp.com",
+      databaseURL: "https://uninotify-3e948-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "uninotify-3e948",
+      storageBucket: "uninotify-3e948.firebasestorage.app",
+      messagingSenderId: "696692515833",
+      appId: "1:696692515833:web:d1ab7c5ae955feec8e9328"
+    };
+
+    // 2) Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // 3) Extract userId from URL: supports /live-location/<userId> or ?userId=<id>
+    function getUserId() {
+      const path = window.location.pathname.split('/').filter(Boolean);
+      const idx = path.findIndex(p => p.toLowerCase() === 'live-location');
+      if (idx >= 0 && path[idx + 1]) return path[idx + 1];
+      const params = new URLSearchParams(window.location.search);
+      return params.get('userId');
+    }
+
+    let map, marker;
+    function initMap() {
+      const center = { lat: 20.5937, lng: 78.9629 }; // India default center
+      map = new google.maps.Map(document.getElementById('map'), {
+        center,
+        zoom: 5,
+        mapId: 'aigiri-map'
+      });
+      marker = new google.maps.Marker({ position: center, map, title: 'Live Location' });
+      startListening();
+    }
+
+    function startListening() {
+      const userId = getUserId();
+      document.getElementById('who').textContent = userId ? `Tracking: ${userId}` : 'No userId in URL';
+      if (!userId) return;
+      const ref = db.ref(`/users/${userId}/location`);
+      ref.on('value', snap => {
+        const data = snap.val();
+        if (!data || typeof data.latitude !== 'number' || typeof data.longitude !== 'number') return;
+        const pos = { lat: data.latitude, lng: data.longitude };
+        marker.setPosition(pos);
+        map.setCenter(pos);
+        map.setZoom(16);
+        const ts = data.timestamp ? new Date(data.timestamp).toLocaleString() : '—';
+        document.getElementById('lastUpdated').textContent = `Last updated: ${ts}`;
+      });
+    }
+  </script>
+</body>
+</html>

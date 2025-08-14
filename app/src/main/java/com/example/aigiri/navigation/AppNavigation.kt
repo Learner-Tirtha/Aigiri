@@ -60,6 +60,9 @@ fun AppNavigation(startDestination: String, tokenManager: TokenManager) {
     val resetPasswordViewModel= remember {
         ResetPasswordViewModel(userRepository = UserRepository())
     }
+    val settingResetPasswordViewModel= remember {
+        SettingResetPasswordViewModel(repository = UserRepository(), tokenManager = TokenManager(context))
+    }
     val liveStreamViewModel=remember{LiveStreamViewModel(tokenManager = TokenManager(context =context))}
     val settingsViewModel= remember { SettingsViewModel(tokenManager = TokenManager(context)) }
     val ChatViewModel= remember { ChatViewModel(ChatRepository()) }
@@ -202,8 +205,27 @@ fun AppNavigation(startDestination: String, tokenManager: TokenManager) {
                 viewModel = resetPasswordViewModel
             )
         }
-        composable("password_update_success") {
-            PasswordUpdateSuccessScreen(navController = navController)
+        composable("forgot_password_update_success") {
+            PasswordUpdateSuccessScreen(onFinish = {
+                navController.navigate("login") {
+                    popUpTo("login") { inclusive = true }
+                }
+            }
+                )
+
+        }
+        composable("reset_password_update_success") {
+            PasswordUpdateSuccessScreen(onFinish = {
+                navController.navigate("dashboard") {
+                    popUpTo("dashboard") { inclusive = true }
+                }
+            }
+            )
+
+        }
+        composable("setting_reset_password")
+        {
+            SettingResetPasswordScreen(navController, viewModel = settingResetPasswordViewModel)
         }
 
     }

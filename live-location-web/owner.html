@@ -1,0 +1,247 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aigiri Owner Live Tracking</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    #map { height: 100%; width: 100%; }
+    .banner { position: absolute; top: 12px; left: 12px; background: #ffffffdd; border-radius: 8px; padding: 10px 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); z-index: 1000; }
+    .status { font-size: 12px; color: #6a1b9a; margin-top: 6px; }
+    .controls { margin-top: 8px; display: flex; gap: 8px; }
+    .btn { background: #6a1b9a; color: white; border: none; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+    .hint { font-size: 11px; color: #555; margin-top: 6px; }
+    .legend { position: absolute; right: 12px; top: 12px; background: #ffffffdd; padding: 8px 10px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.15); font-size: 12px; z-index: 1000; }
+    .viewer-item { margin: 4px 0; }
+    .muted { color: #777; }
+    /* Zoom control will be positioned via Leaflet option (bottomright) */
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="banner">
+    <div><strong>Aigiri</strong> — Your SOS session</div>
+    <div id="who" class="status"></div>
+    <div id="lastUpdated" class="status"></div>
+    <div class="controls">
+      <button id="stopBtn" class="btn">I'm Safe</button>
+      <button id="refreshBtn" class="btn" style="background:#455a64">Refresh</button>
+    </div>
+    <div id="routeInfo" class="hint"></div>
+  </div>
+  <div class="legend">
+    <div><strong>Viewers</strong></div>
+    <div id="viewersList"></div>
+    <div id="viewersHint" class="muted"></div>
+  </div>
+  <div id="map"></div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCkJQ_lWGO_b7Y4KcPGqN5w-z7RKkk_NjE",
+      authDomain: "uninotify-3e948.firebaseapp.com",
+      databaseURL: "https://uninotify-3e948-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "uninotify-3e948",
+      storageBucket: "uninotify-3e948.firebasestorage.app",
+      messagingSenderId: "696692515833",
+      appId: "1:696692515833:web:d1ab7c5ae955feec8e9328"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    function getUserId() {
+      const path = window.location.pathname.split('/').filter(Boolean);
+      const idx = path.findIndex(p => p.toLowerCase() === 'owner');
+      if (idx >= 0 && path[idx + 1]) return path[idx + 1];
+      const params = new URLSearchParams(window.location.search);
+      return params.get('userId');
+    }
+
+    let map, userMarker;
+    const viewerMarkers = {}; // viewerId -> marker
+    const viewerRoutes = {};  // viewerId -> polyline
+
+    function initMap() {
+      const center = [20.5937, 78.9629];
+      // Disable default zoom control so we can place it bottom-right
+      map = L.map('map', { zoomControl: false }).setView(center, 5);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      // Ensure zoom controls in bottom-right (in addition to CSS safety)
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+      userMarker = L.marker(center, { title: 'You' }).addTo(map);
+      start();
+    }
+
+    function start() {
+      const userId = getUserId();
+      document.getElementById('who').textContent = userId ? `Your UID: ${userId}` : 'No userId in URL';
+      if (!userId) return;
+
+      // Stop sharing
+      document.getElementById('stopBtn').addEventListener('click', () => {
+        db.ref(`/users/${userId}/sharing`).set(false).catch(err => alert('Failed to stop: ' + err.message));
+      });
+      // Refresh owner page
+      document.getElementById('refreshBtn').addEventListener('click', () => {
+        location.reload();
+      });
+
+      // Listen to your own location
+      const youRef = db.ref(`/users/${userId}/location`);
+      youRef.on('value', snap => {
+        const data = snap.val();
+        if (!data || typeof data.latitude !== 'number' || typeof data.longitude !== 'number') return;
+        const pos = [data.latitude, data.longitude];
+        userMarker.setLatLng(pos);
+        if (map.getZoom() < 10) map.setView(pos, 14);
+        const ts = data.timestamp ? new Date(data.timestamp).toLocaleString() : '—';
+        document.getElementById('lastUpdated').textContent = `Your last update: ${ts}`;
+        // re-route for all viewers
+        Object.keys(viewerMarkers).forEach(vId => maybeRoute(vId));
+      });
+
+      // Listen to viewers
+      const viewersBase = db.ref(`/sessions/${userId}/viewers`);
+      // Probe read once to check permissions and existing data
+      viewersBase.get().then(s => {
+        console.log('[owner] probe viewers get exists:', s.exists(), s.exists() ? Object.keys(s.val()||{}).length : 0);
+      }).catch(err => {
+        console.error('[owner] probe viewers get error (rules?):', err && err.message);
+        document.getElementById('who').textContent += ' — viewers read error: ' + (err && err.message);
+      });
+      // Summary listener to see total children and attach missing listeners
+      viewersBase.on('value', (snap) => {
+        if (!snap.exists()) {
+          console.warn('[owner] viewers value: no children');
+          renderList();
+          return;
+        }
+        const val = snap.val();
+        const keys = Object.keys(val || {});
+        console.log('[owner] viewers value children:', keys.length, keys);
+        keys.forEach(k => {
+          if (!viewerMarkers[k]) {
+            attachViewer(userId, k);
+          }
+        });
+        renderList();
+      }, (err) => {
+        console.error('[owner] viewers value error:', err && err.message);
+      });
+      viewersBase.on('child_added', (snap) => { console.log('[owner] viewer added', snap.key); attachViewer(userId, snap.key); }, (err) => console.error('[owner] child_added error:', err && err.message));
+      viewersBase.on('child_removed', (snap) => { console.log('[owner] viewer removed', snap.key); detachViewer(snap.key); }, (err) => console.error('[owner] child_removed error:', err && err.message));
+      viewersBase.on('child_changed', (snap) => { console.log('[owner] viewer changed', snap.key); attachViewer(userId, snap.key); }, (err) => console.error('[owner] child_changed error:', err && err.message));
+    }
+
+    function attachViewer(userId, viewerId) {
+      const locRef = db.ref(`/sessions/${userId}/viewers/${viewerId}/location`);
+      locRef.on('value', s => {
+        const d = s.val();
+        if (!d || typeof d.latitude !== 'number' || typeof d.longitude !== 'number') return;
+        const pos = [d.latitude, d.longitude];
+        if (!viewerMarkers[viewerId]) {
+          viewerMarkers[viewerId] = L.marker(pos, { title: `Viewer ${viewerId.slice(0,5)}` }).addTo(map);
+        } else {
+          viewerMarkers[viewerId].setLatLng(pos);
+        }
+        console.log('[owner] location from viewer', viewerId, d);
+        maybeRoute(viewerId);
+        renderList();
+      });
+    }
+
+    function detachViewer(viewerId) {
+      if (viewerMarkers[viewerId]) { viewerMarkers[viewerId].remove(); delete viewerMarkers[viewerId]; }
+      if (viewerRoutes[viewerId]) { viewerRoutes[viewerId].remove(); delete viewerRoutes[viewerId]; }
+      renderList();
+    }
+
+    async function maybeRoute(viewerId, attempt = 1) {
+      const you = userMarker.getLatLng();
+      const marker = viewerMarkers[viewerId];
+      if (!you || !marker) return;
+      const v = marker.getLatLng();
+      // If points are nearly identical, skip routing
+      const eps = 1e-6;
+      if (Math.abs(you.lat - v.lat) < eps && Math.abs(you.lng - v.lng) < eps) {
+        if (viewerRoutes[viewerId]) { viewerRoutes[viewerId].remove(); delete viewerRoutes[viewerId]; }
+        document.getElementById('routeInfo').textContent = 'Viewer is at your location.';
+        return;
+      }
+      const from = `${you.lng},${you.lat}`;
+      const to = `${v.lng},${v.lat}`;
+      try {
+        const url = `https://router.project-osrm.org/route/v1/foot/${from};${to}?overview=full&geometries=geojson&ts=${Date.now()}`;
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.routes || !data.routes.length) throw new Error('No routes');
+        const route = data.routes[0];
+        const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+        if (viewerRoutes[viewerId]) viewerRoutes[viewerId].remove();
+        viewerRoutes[viewerId] = L.polyline(coords, { color: '#6a1b9a', weight: 4, opacity: 0.85 }).addTo(map);
+        document.getElementById('routeInfo').textContent = `Closest route example: ${(route.distance/1000).toFixed(2)} km, ${(route.duration/60).toFixed(0)} min`;
+        // Fit all markers and route
+        const group = L.featureGroup([userMarker, viewerMarkers[viewerId], viewerRoutes[viewerId]]);
+        map.fitBounds(group.getBounds(), { padding: [40, 40] });
+      } catch (e) {
+        console.error('[owner] OSRM routing failed (attempt', attempt, '):', e && e.message);
+        if (viewerRoutes[viewerId]) { viewerRoutes[viewerId].remove(); delete viewerRoutes[viewerId]; }
+        if (attempt < 3) {
+          setTimeout(() => maybeRoute(viewerId, attempt + 1), attempt * 800);
+        } else {
+          // Fallback: draw straight line and approximate distance/ETA
+          const fallback = L.polyline([[you.lat, you.lng], [v.lat, v.lng]], { color: '#6a1b9a', weight: 3, opacity: 0.6, dashArray: '6,6' }).addTo(map);
+          viewerRoutes[viewerId] = fallback;
+          const distKm = haversine(you.lat, you.lng, v.lat, v.lng) / 1000.0;
+          // Assume 1.3 m/s walking speed (~4.7 km/h)
+          const etaMin = Math.max(1, Math.round((distKm * 1000) / 1.3 / 60));
+          const el = document.getElementById('routeInfo');
+          el.textContent = `Approx path (OSRM down): ${distKm.toFixed(2)} km, ~${etaMin} min`;
+          const group = L.featureGroup([userMarker, viewerMarkers[viewerId], fallback]);
+          map.fitBounds(group.getBounds(), { padding: [40, 40] });
+        }
+      }
+    }
+
+    // Haversine distance in meters
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371000; // meters
+      const toRad = (x) => x * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    function renderList() {
+      const list = document.getElementById('viewersList');
+      list.innerHTML = '';
+      const keys = Object.keys(viewerMarkers);
+      keys.forEach(vId => {
+        const el = document.createElement('div');
+        el.className = 'viewer-item';
+        const ll = viewerMarkers[vId].getLatLng();
+        el.textContent = `${vId.slice(0,5)} — ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
+        list.appendChild(el);
+      });
+      const hint = document.getElementById('viewersHint');
+      if (keys.length === 0) {
+        hint.textContent = 'No viewers yet. Share the viewer link and ask them to allow location.';
+      } else {
+        hint.textContent = `${keys.length} viewer(s) connected.`;
+      }
+    }
+
+    initMap();
+  </script>
+</body>
+</html>
