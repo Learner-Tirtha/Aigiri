@@ -1,0 +1,23 @@
+{
+  "name": "aigiri",
+  "version": "1.0.0",
+  "description": "**Aigiri** is a mobile application designed to empower women by providing smart, real-time tools for personal safety, legal complaint generation, and evidence protection — all wrapped in an intuitive, secure, and culturally relevant experience.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Learner-Tirtha/Aigiri.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Learner-Tirtha/Aigiri/issues"
+  },
+  "homepage": "https://github.com/Learner-Tirtha/Aigiri#readme",
+  "devDependencies": {
+    "@zegocloud/zego-uikit-prebuilt": "^2.15.1"
+  }
+}

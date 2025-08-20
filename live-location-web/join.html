@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Join Live Room</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #0b0f19; color: #e6e6e6; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; }
+    .wrap { display:flex; flex-direction:column; min-height:100%; }
+    header { padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); display:flex; align-items:center; gap:12px; position: relative; z-index: 2147483647; }
+    header .dot { width: 10px; height: 10px; border-radius: 50%; background:#22c55e; box-shadow: 0 0 12px #22c55e; }
+    header .title { font-weight: 600; letter-spacing: 0.3px; }
+    #app { flex:1; display:flex; min-height: 0; }
+    .hint { padding: 10px 16px; font-size: 12px; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.06); }
+    a { color:#60a5fa; }
+    .hidden { display:none; }
+    .error { color:#f87171; font-weight:600; }
+    .btn { appearance:none; border:0; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; }
+    .btn-danger { background:#ef4444; color:white; }
+    .btn-danger:hover { background:#dc2626; }
+    .fab { position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; }
+  </style>
+  <!-- ZEGOCLOUD UIKit Prebuilt Web CDN (we'll also load with a runtime fallback below) -->
+  <!-- Docs: https://docs.zegocloud.com/article/14873 -->
+  <script src="https://cdn.jsdelivr.net/npm/@zegocloud/zego-uikit-prebuilt@latest/zego-uikit-prebuilt.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="dot" aria-hidden="true"></div>
+      <div class="title">Live Viewer</div>
+      <div id="roomLabel" style="margin-left:auto; font-size:12px; color:#94a3b8;"></div>
+    </header>
+    <div id="app"></div>
+    <!-- <div class="hint">
+      Having trouble joining? Ensure this link matches the room the broadcaster shared. <span id="err" class="error hidden"></span>
+    </div> -->
+  </div>
+
+  <script>
+    (function() {
+      // Parse roomId from path: /join/<roomId>
+      const path = window.location.pathname.replace(/\/+$/, '');
+      const parts = path.split('/').filter(Boolean);
+      // Expecting ["join", "<roomId>"]
+      const roomId = parts[1] || '';
+
+      // Parse name from query string; default to Guest-<4chars>
+      const params = new URLSearchParams(window.location.search);
+      const displayName = params.get('name') || `Guest-${Math.random().toString(36).slice(2,6)}`;
+
+      // Generate a stable-ish userID for this tab
+      const uid = `web-${Math.random().toString(36).slice(2,10)}`;
+
+      const roomLabel = document.getElementById('roomLabel');
+      roomLabel.textContent = roomId ? `Room: ${roomId}` : 'Room: (missing)';
+
+      if (!roomId) {
+        document.getElementById('err').classList.remove('hidden');
+        document.getElementById('err').textContent = 'Missing roomId in URL.';
+        return;
+      }
+
+      // TODO: Replace with your real values from ZEGOCLOUD Console
+      // IMPORTANT: The appSign approach is ONLY for local/testing. For production,
+      // create a server endpoint to mint tokens and use ZegoUIKitPrebuilt.create(kitTokenFromServer).
+      const appID = 1696426834;
+      const serverSecret = "4c78167f7f215e1ae5537ae337affdf8";
+
+      async function loadZegoIfNeeded() {
+        if (window.ZegoUIKitPrebuilt) return true;
+        const cdns = [
+          'https://cdn.jsdelivr.net/npm/@zegocloud/zego-uikit-prebuilt@latest/zego-uikit-prebuilt.js',
+          'https://unpkg.com/@zegocloud/zego-uikit-prebuilt/zego-uikit-prebuilt.js'
+        ];
+        for (const src of cdns) {
+          try {
+            await new Promise((resolve, reject) => {
+              const s = document.createElement('script');
+              s.src = src;
+              s.async = true;
+              s.onload = () => resolve();
+              s.onerror = () => reject(new Error('Failed ' + src));
+              document.head.appendChild(s);
+            });
+            if (window.ZegoUIKitPrebuilt) return true;
+          } catch (e) {
+            // try next
+          }
+        }
+        return false;
+      }
+
+      const ensureSdk = loadZegoIfNeeded();
+      ensureSdk.then((ok) => {
+        if (!ok || !window.ZegoUIKitPrebuilt) {
+          const errEl = document.getElementById('err');
+          if (errEl) {
+            errEl.classList.remove('hidden');
+            errEl.innerHTML = 'Zego SDK failed to load. Please check your network and try again.';
+          }
+          return;
+        }
+
+      if (!appID || serverSecret === 'YOUR_SERVER_SECRET') {
+        console.warn('ZEGOCLOUD appID/serverSecret not set. Set them for testing or switch to server token.');
+      }
+
+      // For testing ONLY: generate a kit token on client
+      const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(appID, serverSecret, roomId, uid, displayName);
+
+      const zp = ZegoUIKitPrebuilt.create(kitToken);
+
+      // Keep cleanup on page close
+      // Clean up if page closes
+      window.addEventListener('beforeunload', () => {
+        try { zp.destroy(); } catch (e) {}
+      });
+
+      zp.joinRoom({
+        container: document.getElementById('app'),
+        sharedLinks: [
+          {
+            name: 'Copy link',
+            url: window.location.origin + `/join/${encodeURIComponent(roomId)}?name=` + encodeURIComponent(displayName),
+          },
+        ],
+        // Live streaming as audience (viewer)
+        scenario: { mode: ZegoUIKitPrebuilt.LiveStreaming, config: { role: 'audience' } },
+        turnOnCameraWhenJoining: false,
+        turnOnMicrophoneWhenJoining: false,
+        showMyCameraToggleButton: false,
+        showMyMicrophoneToggleButton: false,
+        showScreenSharingButton: false,
+        showLayoutButton: false,
+        showTextChat: true,
+        showUserList: true,
+      });
+      });
+    })();
+  </script>
+</body>
+</html>

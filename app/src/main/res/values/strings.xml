@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Aigiri</string>
+    <string name="biometric_auth_required">Authentication Required</string>
+    <string name="authenticate_to_access_history">Authenticate to access your history</string>
+    <string name="authentication_cancelled">Authentication cancelled</string>
+    <string name="authentication_failed">Authentication failed</string>
+</resources>

@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aigiri Owner Live Tracking</title>
+    <link
+            rel="stylesheet"
+            href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        html,
+        body {
+          height: 100%;
+          margin: 0;
+          font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+            Arial;
+        }
+        #map {
+          height: 100%;
+          width: 100%;
+        }
+        .banner {
+          position: absolute;
+          top: 12px;
+          left: 12px;
+          right: 12px;
+          background: #fff;
+          border-radius: 8px;
+          padding: 10px 12px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+          z-index: 1000;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 6px;
+        }
+        .banner-title {
+          font-weight: bold;
+          font-size: 16px;
+        }
+        .status {
+          font-size: 12px;
+          color: #6a1b9a;
+          margin: 0;
+        }
+        .legend {
+          margin-top: 8px;
+          font-size: 12px;
+        }
+        .muted {
+          color: #555;
+          font-size: 11px;
+        }
+        .stop-container {
+          position: absolute;
+          bottom: 12px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 1000;
+          display: flex;
+          gap: 8px;
+        }
+        .btn {
+  background: #6a1b9a; /* purple */
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.3s ease;
+}
+.btn:disabled {
+  background: #bbb;   /* gray when disabled */
+  cursor: not-allowed;
+}
+
+
+        @media (max-width: 600px) {
+          .banner {
+            top: 8px;
+            left: 8px;
+            right: 8px;
+            padding: 8px;
+            font-size: 12px;
+          }
+          .banner-title {
+            font-size: 14px;
+          }
+          .status {
+            font-size: 11px;
+          }
+          .btn {
+            font-size: 13px;
+            padding: 6px 12px;
+          }
+        }
+    </style>
+</head>
+<body>
+<div class="banner">
+    <div class="banner-title">Aigiri</div>
+    <div id="lastUpdated" class="status">Last update: —</div>
+
+    <div class="legend">
+        <div><strong>Viewers</strong></div>
+        <div id="viewersList"></div>
+        <div id="viewersHint" class="muted"></div>
+    </div>
+</div>
+
+<div class="stop-container">
+    <button id="stopBtn" class="btn">Stop sharing</button>
+    <button id="shareBtn" class="btn" disabled>Share</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCkJQ_lWGO_b7Y4KcPGqN5w-z7RKkk_NjE",
+      authDomain: "uninotify-3e948.firebaseapp.com",
+      databaseURL:
+        "https://uninotify-3e948-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "uninotify-3e948",
+      storageBucket: "uninotify-3e948.appspot.com",
+      messagingSenderId: "696692515833",
+      appId: "1:696692515833:web:d1ab7c5ae955feec8e9328",
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let map, userMarker;
+    const viewerMarkers = {};
+    const viewerRoutes = {};
+
+    function getUserId() {
+      const params = new URLSearchParams(window.location.search);
+      const userId = params.get("userId");
+      console.log("getUserId:", userId);
+      return userId;
+    }
+
+    let locationInterval;
+    let isSharing = false;
+    const toggleBtn = document.getElementById("stopBtn");
+
+    function syncButtonState() {
+      const userId = getUserId();
+      if (!userId) {
+        console.log("syncButtonState: No userId found");
+        return;
+      }
+
+      db.ref(`/users/${userId}/isActive`)
+        .get()
+        .then((snap) => {
+          isSharing = snap.val() === true;
+          toggleBtn.textContent = isSharing ? "I'm Safe" : "I'm in Danger";
+            shareBtn.disabled = !isSharing;
+          console.log("syncButtonState: isSharing =", isSharing);
+        })
+        .catch((e) => console.error("syncButtonState error:", e));
+    }
+
+    async function startLiveSharing() {
+      console.log("startLiveSharing called");
+      const userId = getUserId();
+      if (!userId) {
+        console.error("startLiveSharing: Missing userId");
+        return alert("Missing userId!");
+      }
+      if (!navigator.geolocation) {
+        console.error("startLiveSharing: Geolocation not supported");
+        return alert("Geolocation not supported!");
+      }
+
+      const userRef = db.ref(`/users/${userId}`);
+      const userSnap = await userRef.get();
+      let sessionId;
+
+      if (userSnap.exists()) {
+        const userData = userSnap.val();
+        console.log("startLiveSharing: userData", userData);
+        if (userData.isActive) {
+          sessionId = userData.sessionId;
+          console.log("startLiveSharing: Reusing active sessionId", sessionId);
+        } else {
+          if (userData.sessionId) {
+            console.log("startLiveSharing: Removing old session", userData.sessionId);
+            await db.ref(`/sos_session/${userData.sessionId}`).remove();
+          }
+          sessionId = `session_${Date.now()}`;
+          await userRef.update({ isActive: true, sessionId });
+          await db.ref(`/sos_session/${sessionId}/users/${userId}`).set({});
+          console.log("startLiveSharing: Created new session", sessionId);
+        }
+      } else {
+        sessionId = `session_${Date.now()}`;
+        await userRef.set({ isActive: true, sessionId });
+        await db.ref(`/sos_session/${sessionId}/users/${userId}`).set({});
+        console.log("startLiveSharing: Created first-time session", sessionId);
+      }
+
+      if (locationInterval) clearInterval(locationInterval);
+
+      locationInterval = setInterval(() => {
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            console.log("startLiveSharing: Got geolocation", pos.coords);
+            const { latitude, longitude } = pos.coords;
+            const timestamp = Date.now();
+            const locationData = { latitude, longitude, timestamp };
+
+            await Promise.all([
+              db.ref(`/sos_session/${sessionId}/users/${userId}`).set(locationData),
+              db.ref(`/users/${userId}/location`).set(locationData),
+            ]);
+
+            const posArray = [latitude, longitude];
+            if (!userMarker) {
+              userMarker = L.marker(posArray, { title: "You" }).addTo(map);
+              console.log("startLiveSharing: Created userMarker");
+            } else {
+              userMarker.setLatLng(posArray);
+            }
+
+            map.setView(posArray, 15);
+            document.getElementById(
+              "lastUpdated"
+            ).textContent = `Last update: ${new Date(timestamp).toLocaleString()}`;
+          },
+          (err) => console.error("startLiveSharing geolocation error:", err)
+        );
+      }, 5000);
+
+      isSharing = true;
+      toggleBtn.textContent = "I'm Safe";
+      shareBtn.disabled = false;
+      console.log("startLiveSharing: Sharing started");
+    }
+
+    function stopLiveSharing() {
+      console.log("stopLiveSharing called");
+      const userId = getUserId();
+      if (!userId) {
+        console.error("stopLiveSharing: No userId in URL");
+        return alert("No userId in URL");
+      }
+
+      if (locationInterval) {
+        clearInterval(locationInterval);
+        locationInterval = null;
+        console.log("stopLiveSharing: locationInterval cleared");
+      }
+
+      const userRef = db.ref(`/users/${userId}`);
+      userRef
+        .update({ isActive: false })
+        .then(() => {
+          isSharing = false;
+          toggleBtn.textContent = "I'm in Danger";
+           shareBtn.disabled = true;
+          alert("Live sharing stopped");
+          console.log("stopLiveSharing: Live sharing stopped");
+        })
+        .catch((err) => console.error("Error stopping live sharing:", err));
+    }
+
+    toggleBtn.onclick = () => {
+      console.log("toggleBtn clicked. isSharing:", isSharing);
+      if (isSharing) stopLiveSharing();
+      else startLiveSharing();
+    };
+
+    function initMap() {
+      console.log("initMap called");
+      map = L.map("map", { zoomControl: false }).setView([20.5937, 78.9629], 5);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OSM contributors",
+      }).addTo(map);
+      L.control.zoom({ position: "bottomright" }).addTo(map);
+      startTracking();
+    }
+
+    // --- FIX: wait for sessionId continuously (not just once) ---
+    function waitForSessionId(userId, callback) {
+      console.log("waitForSessionId called for userId:", userId);
+      const userRef = db.ref(`/users/${userId}`);
+
+      userRef.on("value", (snap) => {
+        const data = snap.val();
+        if (data && data.sessionId) {
+          console.log("waitForSessionId: sessionId found:", data.sessionId);
+          callback(data.sessionId);
+        } else {
+          console.log("waitForSessionId: sessionId not found yet");
+        }
+      });
+    }
+
+    // track the current viewerRef so we can detach old ones
+    let currentViewersRef = null;
+
+    function startListeningViewers(userId) {
+      console.log("startListeningViewers called for userId:", userId);
+
+      waitForSessionId(userId, (sessionId) => {
+        console.log("startListeningViewers: sessionId received:", sessionId);
+
+        if (currentViewersRef) {
+          currentViewersRef.off();
+          console.log("startListeningViewers: Detached old listeners");
+        }
+
+        currentViewersRef = db.ref(`/sos_session/${sessionId}/viewer`);
+
+        currentViewersRef.on("child_added", (snap) => {
+          console.log("child_added triggered for viewer:", snap.key, snap.val());
+          attachViewer(sessionId, snap.key, snap.val());
+        });
+
+        currentViewersRef.on("child_changed", (snap) => {
+          console.log("child_changed triggered for viewer:", snap.key, snap.val());
+          attachViewer(sessionId, snap.key, snap.val());
+        });
+
+        currentViewersRef.on("child_removed", (snap) => {
+          console.log("child_removed triggered for viewer:", snap.key);
+          detachViewer(snap.key);
+        });
+      });
+    }
+
+    function startTracking() {
+      console.log("startTracking called");
+      const userId = getUserId();
+      if (!userId) {
+        console.error("startTracking: No userId in URL");
+        return alert("No userId in URL");
+      }
+
+      // start listening for viewers
+      startListeningViewers(userId);
+
+      const youRef = db.ref(`/users/${userId}/location`);
+      youRef.on("value", (snap) => {
+        const data = snap.val();
+        if (!data || typeof data.latitude !== "number") {
+          console.log("startTracking: Invalid location data", data);
+          return;
+        }
+        const pos = [data.latitude, data.longitude];
+        if (!userMarker) {
+          userMarker = L.marker(pos, {
+            title: "You",
+            icon: L.icon({
+              iconUrl: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+              iconAnchor: [12, 41],
+            }),
+          }).addTo(map);
+          console.log("startTracking: Created userMarker");
+        } else userMarker.setLatLng(pos);
+
+        document.getElementById(
+          "lastUpdated"
+        ).textContent = `Last update: ${
+          data.timestamp ? new Date(data.timestamp).toLocaleString() : "—"
+        }`;
+        Object.keys(viewerMarkers).forEach((vId) => updateRoute(vId));
+      });
+    }
+
+    function attachViewer(sessionId, viewerId, loc) {
+      if (!loc || typeof loc.latitude !== "number" || typeof loc.longitude !== "number") {
+        console.warn(`attachViewer: Invalid location for viewer ${viewerId}`, loc);
+        return;
+      }
+
+      const pos = [loc.latitude, loc.longitude];
+      console.log(`attachViewer: Creating/Updating marker for ${viewerId}`, pos);
+
+      if (!viewerMarkers[viewerId]) {
+        viewerMarkers[viewerId] = L.marker(pos, {
+          title: `Viewer ${viewerId.slice(0, 5)}`,
+          icon: L.icon({
+            iconUrl: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
+            iconAnchor: [12, 41],
+          }),
+        }).addTo(map);
+      } else {
+        viewerMarkers[viewerId].setLatLng(pos);
+      }
+
+      renderViewers();
+      updateRoute(viewerId);
+    }
+
+    function renderViewers() {
+      const viewersList = document.getElementById("viewersList");
+      const viewersHint = document.getElementById("viewersHint");
+      const keys = Object.keys(viewerMarkers);
+
+      console.log("renderViewers: Current viewer IDs:", keys);
+
+      viewersList.innerHTML = "";
+      if (keys.length === 0) {
+        viewersList.textContent = "No active viewers yet.";
+        viewersHint.textContent = "Share your location so viewers can connect.";
+        return;
+      }
+
+      keys.forEach((vId) => {
+        const li = document.createElement("div");
+        li.textContent = `Viewer ${vId.slice(0, 5)}`;
+        viewersList.appendChild(li);
+        console.log(`renderViewers: Added viewer ${vId} to list`);
+      });
+
+      viewersHint.textContent = "";
+    }
+
+    function detachViewer(viewerId) {
+      console.log(`Detaching viewer:`, viewerId);
+      if (viewerMarkers[viewerId]) {
+        viewerMarkers[viewerId].remove();
+        delete viewerMarkers[viewerId];
+        console.log(`detachViewer: Removed marker for viewer ${viewerId}`);
+      }
+      if (viewerRoutes[viewerId]) {
+        viewerRoutes[viewerId].remove();
+        delete viewerRoutes[viewerId];
+        console.log(`detachViewer: Removed route for viewer ${viewerId}`);
+      }
+      renderViewers();
+    }
+
+    async function updateRoute(viewerId) {
+      if (!userMarker || !viewerMarkers[viewerId]) {
+        console.log(`updateRoute: Missing userMarker or viewerMarker for ${viewerId}`);
+        return;
+      }
+      const from = `${userMarker.getLatLng().lng},${userMarker.getLatLng().lat}`;
+      const to = `${viewerMarkers[viewerId].getLatLng().lng},${viewerMarkers[viewerId].getLatLng().lat}`;
+      try {
+        console.log(`updateRoute: Fetching route from ${from} to ${to}`);
+        const res = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${from};${to}?overview=full&geometries=geojson`
+        );
+        const data = await res.json();
+        if (!data.routes || !data.routes[0]) {
+          console.log("updateRoute: No routes found");
+          return;
+        }
+        const coords = data.routes[0].geometry.coordinates.map((c) => [c[1], c[0]]);
+        if (!viewerRoutes[viewerId]) {
+          viewerRoutes[viewerId] = L.polyline(coords, { color: "purple" }).addTo(map);
+          console.log(`updateRoute: Created polyline route for viewer ${viewerId}`);
+        } else {
+          viewerRoutes[viewerId].setLatLngs(coords);
+        }
+      } catch (e) {
+        console.error("Error fetching route:", e);
+      }
+    }
+     shareBtn.onclick = () => {
+      if (navigator.share) {
+        navigator.share({
+          title: "Aigiri Live Location",
+          text: "Track my live location here:",
+          url: window.location.href,
+        }).catch(err => console.error("Share failed:", err));
+      } else {
+        alert("Sharing not supported on this device. Copy the link manually.");
+      }
+    };
+
+    window.onload = () => {
+      console.log("window.onload called");
+      initMap();
+      syncButtonState();
+    };
+</script>
+
+</body>
+</html>

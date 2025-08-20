@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aigiri Live Location</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <style>
+        html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+        #map { height: 100%; width: 100%; }
+        .banner {
+            position: absolute; top: 12px; left: 12px; background: #ffffffdd;
+            border-radius: 8px; padding: 10px 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); z-index: 1000;
+        }
+        .status { font-size: 12px; color: #6a1b9a; margin-top: 6px; }
+        .leaflet-container { background: #eef2f7; }
+        .controls { margin-top: 8px; display: flex; gap: 8px; }
+        .btn { background: #6a1b9a; color: white; border: none; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+        .btn.secondary { background: #455a64; }
+        .hint { font-size: 11px; color: #555; margin-top: 6px; }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+</head>
+<body>
+
+<div class="banner">
+    <div><strong>Aigiri</strong> — Live Location</div>
+    <div id="who" class="status"></div>
+    <div id="lastUpdated" class="status"></div>
+    <div class="controls">
+        <button id="locBtn" class="btn secondary">Share my location</button>
+    </div>
+    <div id="routeInfo" class="hint"></div>
+</div>
+
+<div id="map"></div>
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyCkJQ_lWGO_b7Y4KcPGqN5w-z7RKkk_NjE",
+        authDomain: "uninotify-3e948.firebaseapp.com",
+        databaseURL: "https://uninotify-3e948-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "uninotify-3e948",
+        storageBucket: "uninotify-3e948.firebasestorage.app",
+        messagingSenderId: "696692515833",
+        appId: "1:696692515833:web:d1ab7c5ae955feec8e9328"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let map, victimMarker, viewerMarker, routeLine;
+    let latestVictim = null, latestViewer = null;
+    let watchId = null, routeTimer = null;
+    let viewerRef = null;
+    let sharing = false;
+    let viewerWarningMarker = null;
+
+    function getSessionId() {
+        return new URLSearchParams(window.location.search).get('sessionId');
+    }
+
+    function getUserId() {
+        return new URLSearchParams(window.location.search).get('userId');
+    }
+
+    function getViewerId() {
+        console.log('getViewerId called');
+        const viewerId = `${getUserId()}_${Math.floor(Math.random() * 10000)}`;
+        console.log('viewerId:', viewerId);
+        return viewerId;
+    }
+
+    function initMap() {
+        console.log('Initializing map');
+        map = L.map('map', { zoomControl: false }).setView([20.5937, 78.9629], 2);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        const redIcon = L.icon({
+            iconUrl: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        const blueIcon = L.icon({
+            iconUrl: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        victimMarker = L.marker([0, 0], { icon: redIcon, opacity: 0 }).addTo(map);
+        viewerMarker = L.marker([0, 0], { icon: blueIcon, opacity: 0 }).addTo(map);
+
+        startLocalTracking();
+        setupLocationButton();
+        trackVictim();
+    }
+
+    function updateMapView() {
+        const group = [latestVictim ? victimMarker : null, latestViewer ? viewerMarker : null].filter(Boolean);
+
+        if (!latestViewer) {
+            console.warn("Viewer location missing — showing warning marker");
+            if (!viewerWarningMarker) {
+                viewerWarningMarker = L.circle(map.getCenter(), {
+                    radius: 50,
+                    color: 'red',
+                    fillColor: '#f03',
+                    fillOpacity: 0.5
+                }).addTo(map);
+            } else {
+                viewerWarningMarker.setLatLng(map.getCenter());
+            }
+        } else if (viewerWarningMarker) {
+            map.removeLayer(viewerWarningMarker);
+            viewerWarningMarker = null;
+        }
+
+        if (group.length > 0) {
+            map.fitBounds(L.featureGroup(group).getBounds(), { padding: [50, 50] });
+        }
+    }
+
+    function startLocalTracking() {
+        if (!navigator.geolocation) {
+            console.warn('Geolocation not supported');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            pos => updateViewer(pos.coords, false),
+            err => console.warn('Geolocation getCurrentPosition error:', err),
+            { enableHighAccuracy: true }
+        );
+
+        watchId = navigator.geolocation.watchPosition(
+            pos => updateViewer(pos.coords, sharing),
+            err => console.warn('Geolocation watch error:', err),
+            { enableHighAccuracy: true, maximumAge: 2000 }
+        );
+    }
+
+    function setupLocationButton() {
+        const locBtn = document.getElementById('locBtn');
+        locBtn.addEventListener('click', () => {
+            sharing = !sharing;
+            locBtn.textContent = sharing ? "Stop sharing" : "Share my location";
+
+            const sessionId = getSessionId();
+            const viewerId = getViewerId();
+            if (sharing) {
+                console.log("Sharing location:", sessionId, viewerId);
+                viewerRef = db.ref(`/sos_session/${sessionId}/viewer/${viewerId}`);
+                if (latestViewer) viewerRef.set(latestViewer).catch(err => console.error(err));
+            } else {
+                if (viewerRef) viewerRef.remove().catch(() => {});
+            }
+        });
+    }
+
+    function trackVictim() {
+        const sessionId = getSessionId();
+        const userId = getUserId();
+        console.log("trackVictim called:", { sessionId, userId });
+
+        if (!sessionId || !userId) {
+            console.warn("Missing sessionId or userId, cannot track victim");
+            return;
+        }
+
+        const userRef = db.ref(`/sos_session/${sessionId}/users/${userId}`);
+        console.log("Firebase reference created:", userRef.toString());
+
+        userRef.on('value', snap => {
+            const data = snap.val();
+            console.log("Firebase snapshot received:", data);
+
+            if (!data || typeof data.latitude !== 'number' || typeof data.longitude !== 'number') {
+                console.warn("Invalid or missing victim location data:", data);
+                return;
+            }
+
+            latestVictim = { latitude: data.latitude, longitude: data.longitude };
+            console.log("Updating victimMarker to:", latestVictim);
+
+            victimMarker.setLatLng([latestVictim.latitude, latestVictim.longitude]).setOpacity(1);
+
+            document.getElementById('lastUpdated').textContent =
+                `Last updated: ${data.timestamp ? new Date(data.timestamp).toLocaleString() : '—'}`;
+
+            maybeRouteDebounced();
+            updateMapView();
+        });
+    }
+
+    function updateViewer(coords, sendToFirebase) {
+        latestViewer = {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            timestamp: Date.now()
+        };
+        console.log("Updating viewerMarker to:", latestViewer);
+
+        viewerMarker.setLatLng([latestViewer.latitude, latestViewer.longitude]).setOpacity(1);
+
+        if (sendToFirebase && viewerRef) {
+            viewerRef.set(latestViewer).catch(err => console.error(err));
+        }
+
+        maybeRouteDebounced();
+        updateMapView();
+    }
+
+    async function maybeRoute() {
+        if (!latestVictim || !latestViewer) {
+            console.warn("Cannot draw route: missing victim or viewer location");
+            return;
+        }
+
+        console.log("Drawing route from viewer to victim");
+
+        const from = `${latestViewer.longitude},${latestViewer.latitude}`;
+        const to = `${latestVictim.longitude},${latestVictim.latitude}`;
+
+        try {
+            const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${from};${to}?overview=full&geometries=geojson`);
+            const json = await res.json();
+            if (!json.routes?.[0]) {
+                console.warn("No routes found in OSRM response");
+                return;
+            }
+
+            const route = json.routes[0];
+            const coords = route.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+
+            if (routeLine) routeLine.remove();
+
+            routeLine = L.polyline(coords, {
+                color: '#6a1b9a', weight: 5, opacity: 0.9, lineJoin: 'round', lineCap: 'round'
+            }).addTo(map);
+
+            const distanceKm = (route.distance / 1000).toFixed(1);
+            const durationMin = Math.round(route.duration / 60);
+
+            document.getElementById("routeInfo").textContent =
+                `Distance: ${distanceKm} km | ETA: ${durationMin} min (driving)`;
+
+            console.log("Route drawn successfully");
+            updateMapView();
+        } catch (e) {
+            console.error('Routing failed:', e);
+        }
+    }
+
+    function maybeRouteDebounced() {
+        clearTimeout(routeTimer);
+        routeTimer = setTimeout(maybeRoute, 700);
+    }
+
+    window.addEventListener('beforeunload', () => {
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+        if (viewerRef && sharing) viewerRef.remove().catch(() => {});
+    });
+
+    initMap();
+</script>
+
+
+
+</body>
+</html>

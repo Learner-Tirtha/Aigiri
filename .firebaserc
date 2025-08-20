@@ -1,0 +1,5 @@
+{
+  "projects": {
+    "default": "uninotify-3e948"  // Replace with your actual Firebase project ID
+  }
+}
